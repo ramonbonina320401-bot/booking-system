@@ -54,6 +54,13 @@ service cloud.firestore {
     function strLenOk(value, max) {
       return value == null || value.size() <= max;
     }
+    // Length guard that tolerates a field MISSING entirely from the merged
+    // doc (rules error on accessing a non-existent key, which would reject
+    // legitimate updates to legacy profiles that lack optional fields like
+    // avatar_url). Checks existence first, then falls through to strLenOk.
+    function fieldLenOk(doc, field, max) {
+      return !(field in doc) || strLenOk(doc[field], max);
+    }
     // Slot is in the future: start_ms is the numeric epoch mirror of the ISO
     // start_time written by the app (rules can't parse ISO strings).
     function startsInFuture() {
@@ -82,9 +89,9 @@ service cloud.firestore {
       allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
       allow create: if isOwner(uid)
         && strLenOk(request.resource.data.full_name, 100)
-        && strLenOk(request.resource.data.phone, 30)
-        && strLenOk(request.resource.data.email, 254)
-        && strLenOk(request.resource.data.avatar_url, 600000);
+        && fieldLenOk(request.resource.data, 'phone', 30)
+        && fieldLenOk(request.resource.data, 'email', 254)
+        && fieldLenOk(request.resource.data, 'avatar_url', 600000);
       // Users may edit their own profile (name/phone/avatar/...) but NEVER
       // their own role or active flag — those are admin-only. This also
       // closes the self-escalation hole (regular user → admin via self-update).
@@ -93,9 +100,9 @@ service cloud.firestore {
             && request.resource.data.role == resource.data.role
             && request.resource.data.active == resource.data.active))
         && strLenOk(request.resource.data.full_name, 100)
-        && strLenOk(request.resource.data.phone, 30)
-        && strLenOk(request.resource.data.email, 254)
-        && strLenOk(request.resource.data.avatar_url, 600000);
+        && fieldLenOk(request.resource.data, 'phone', 30)
+        && fieldLenOk(request.resource.data, 'email', 254)
+        && fieldLenOk(request.resource.data, 'avatar_url', 600000);
       // Owner may delete their own profile ONLY while active — a deactivated
       // user must not be able to wipe the profile (that would reset the
       // active flag on next ensureProfile and bypass deactivation).
@@ -108,9 +115,9 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update: if isAdmin()
         && strLenOk(request.resource.data.title, 100)
-        && strLenOk(request.resource.data.body, 2000)
-        && strLenOk(request.resource.data.start_date, 10)
-        && strLenOk(request.resource.data.end_date, 10);
+        && fieldLenOk(request.resource.data, 'body', 2000)
+        && fieldLenOk(request.resource.data, 'start_date', 10)
+        && fieldLenOk(request.resource.data, 'end_date', 10);
       allow delete: if isAdmin();
     }
 
@@ -119,7 +126,7 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isAdmin()
         && strLenOk(request.resource.data.name, 100)
-        && strLenOk(request.resource.data.description, 1000);
+        && fieldLenOk(request.resource.data, 'description', 1000);
       allow delete: if isAdmin();
     }
 
@@ -136,7 +143,7 @@ service cloud.firestore {
         && emailVerifiedOrPhone()
         && !maintenanceOn()
         && startsInFuture()
-        && strLenOk(request.resource.data.notes, 500)
+        && fieldLenOk(request.resource.data, 'notes', 500)
         && request.resource.data.user_id == request.auth.uid
         && request.resource.data.status == 'pending'
         && get(/databases/$(database)/documents/resources/$(request.resource.data.resource_id)).data.is_active == true;
@@ -163,7 +170,7 @@ service cloud.firestore {
         && emailVerifiedOrPhone()
         && !maintenanceOn()
         && startsInFuture()
-        && strLenOk(request.resource.data.notes, 500)
+        && fieldLenOk(request.resource.data, 'notes', 500)
         && request.resource.data.user_id == request.auth.uid
         && request.resource.data.status == 'pending';
 

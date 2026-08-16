@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { CalendarDays, Chrome, Facebook, Loader2, LogIn, Mail, MessageCircle, Phone, ShieldCheck, Sparkles, UserPlus, UserRound } from 'lucide-react'
+import { CalendarDays, Chrome, Eye, EyeOff, Facebook, Loader2, LogIn, Mail, MessageCircle, Phone, ShieldCheck, Sparkles, UserPlus, UserRound } from 'lucide-react'
 import type { ConfirmationResult } from 'firebase/auth'
 import { toast } from 'sonner'
 
@@ -20,6 +20,22 @@ const DEMO_ACCOUNTS = [
   { label: 'Admin', email: 'admin@booking.test', password: 'Admin123!', icon: ShieldCheck },
   { label: 'User', email: 'user@booking.test', password: 'User123!', icon: UserRound },
 ]
+
+/** Lightweight strength check for the signup password. Scores 5 criteria
+ *  (length, upper, lower, digit, special) and maps them to 3 levels so the
+ *  meter is honest without being pedantic. */
+function passwordStrength(pw: string): 'weak' | 'medium' | 'strong' | null {
+  if (!pw) return null
+  let score = 0
+  if (pw.length >= 8) score++
+  if (/[A-Z]/.test(pw)) score++
+  if (/[a-z]/.test(pw)) score++
+  if (/[0-9]/.test(pw)) score++
+  if (/[^A-Za-z0-9]/.test(pw)) score++
+  if (score <= 2) return 'weak'
+  if (score === 3) return 'medium'
+  return 'strong'
+}
 
 /** Time-of-day greeting — the small personal touch that replaces "welcome back".
  *  Signup mode swaps in a mode-aware headline instead. */
@@ -48,6 +64,7 @@ export function LoginPage() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [fullName, setFullName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   // Third-party / phone login state
@@ -64,6 +81,8 @@ export function LoginPage() {
 
   const from = (location.state as { from?: string } | null)?.from ?? '/'
   const anyBusy = submitting || socialBusy !== null || phoneBusy
+
+  const strength = useMemo(() => passwordStrength(password), [password])
 
   const tagline = useMemo(() => {
     const name = branding.appName
@@ -305,17 +324,70 @@ export function LoginPage() {
                     </button>
                   )}
                 </div>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                  required
-                  minLength={mode === 'signup' ? 8 : 6}
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    required
+                    minLength={mode === 'signup' ? 8 : 6}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
+                    aria-pressed={showPassword}
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
                 {mode === 'signup' && (
-                  <p className="text-xs text-muted-foreground">{t('login.passwordHint')}</p>
+                  <>
+                    {/* Strength meter — 3 segments, only while typing */}
+                    {strength && (
+                      <div className="mt-2 space-y-1.5">
+                        <div className="flex gap-1" aria-hidden="true">
+                          {[0, 1, 2].map((i) => (
+                            <span
+                              key={i}
+                              className={`h-1 flex-1 rounded-full transition-colors ${
+                                i < (strength === 'weak' ? 1 : strength === 'medium' ? 2 : 3)
+                                  ? strength === 'weak'
+                                    ? 'bg-red-500'
+                                    : strength === 'medium'
+                                      ? 'bg-amber-500'
+                                      : 'bg-emerald-500'
+                                  : 'bg-border'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <p
+                          role="status"
+                          className={`text-xs font-medium ${
+                            strength === 'weak'
+                              ? 'text-red-500'
+                              : strength === 'medium'
+                                ? 'text-amber-600'
+                                : 'text-emerald-600'
+                          }`}
+                        >
+                          {t(
+                            strength === 'weak'
+                              ? 'login.strengthWeak'
+                              : strength === 'medium'
+                                ? 'login.strengthMedium'
+                                : 'login.strengthStrong'
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">{t('login.passwordHint')}</p>
+                  </>
                 )}
               </div>
 

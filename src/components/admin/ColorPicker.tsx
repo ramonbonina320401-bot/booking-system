@@ -39,10 +39,13 @@ export function ColorPicker({ id, label, value, onChange }: ColorPickerProps) {
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id}>
+        {label}
+        <span className="ml-1.5 font-mono text-[11px] font-normal text-muted-foreground">· {hex}</span>
+      </Label>
       <div
         id={id}
-        className="grid grid-cols-5 gap-2 sm:grid-cols-4"
+        className="flex flex-wrap gap-2"
         role="group"
         aria-label={`${label} presets`}
       >
@@ -53,7 +56,7 @@ export function ColorPicker({ id, label, value, onChange }: ColorPickerProps) {
               key={c}
               type="button"
               className={cn(
-                'relative flex aspect-square items-center justify-center rounded-xl border border-border transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'relative flex h-9 w-9 items-center justify-center rounded-lg border border-border transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 active && 'ring-2 ring-ring ring-offset-1'
               )}
               style={{ backgroundColor: c }}

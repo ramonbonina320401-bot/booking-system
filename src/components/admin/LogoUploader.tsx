@@ -2,11 +2,10 @@ import { useRef, useState } from 'react'
 import { ImagePlus, Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { uploadLogo, validateLogoSize, LOGO_MAX_SIZE, LOGO_MIN_SIZE } from '@/lib/storage'
+import { uploadLogo } from '@/lib/storage'
 import { useI18n, tr } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { LogoEditor } from '@/components/admin/LogoEditor'
 import type { BrandingValues } from '@/types/settings.types'
 
 interface LogoUploaderProps {
@@ -15,24 +14,25 @@ interface LogoUploaderProps {
 }
 
 /**
- * LogoUploader — reads the logo as a base64 data URL (stored in Firestore,
- * no paid Storage needed), validates type/size, previews live with the
- * configured width/height, and constrains dimensions to 40–300px.
+ * LogoUploader — upload a logo, then open a zoom/crop editor so the admin
+ * frames exactly what they want. The crop derives the navbar display size
+ * automatically (no manual width/height fields anymore). The cropped image is
+ * stored as a base64 data URL in Firestore (free plan — no Cloud Storage).
  */
 export function LogoUploader({ branding, onLogoChange }: LogoUploaderProps) {
   const { t } = useI18n()
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
-  const [width, setWidth] = useState(branding.logoWidth)
-  const [height, setHeight] = useState(branding.logoHeight)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [pendingSrc, setPendingSrc] = useState<string | null>(null)
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return
     setUploading(true)
     try {
-      const url = await uploadLogo(file)
-      onLogoChange(url, width, height)
-      toast.success(tr('logo.loaded'))
+      const url = await uploadLogo(file) // validates type + size
+      setPendingSrc(url)
+      setEditorOpen(true)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : tr('logo.uploadFailed'))
     } finally {
@@ -41,32 +41,22 @@ export function LogoUploader({ branding, onLogoChange }: LogoUploaderProps) {
     }
   }
 
-  const handleSize = (dim: 'width' | 'height', value: number) => {
-    try {
-      validateLogoSize(
-        dim === 'width' ? value : width,
-        dim === 'height' ? value : height
-      )
-    } catch {
-      toast.error(tr('logo.sizeError'))
-      return
-    }
-    if (dim === 'width') setWidth(value)
-    else setHeight(value)
-    onLogoChange(branding.logoUrl, dim === 'width' ? value : width, dim === 'height' ? value : height)
+  const handleApplyCrop = (dataUrl: string, width: number, height: number) => {
+    onLogoChange(dataUrl, width, height)
+    toast.success(tr('logo.cropped'))
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        {/* Live preview */}
-        <div className="flex h-24 w-40 items-center justify-center rounded-lg border bg-muted/40 p-2">
+        {/* Live preview — display size comes from the crop, not manual inputs */}
+        <div className="flex h-24 w-40 shrink-0 items-center justify-center rounded-lg border bg-muted/40 p-2">
           {branding.logoUrl ? (
             <img
               src={branding.logoUrl}
               alt={t('logo.preview')}
               className="max-h-20 max-w-full object-contain"
-              style={{ width, height }}
+              style={{ width: branding.logoWidth, height: branding.logoHeight }}
             />
           ) : (
             <span className="text-xs text-muted-foreground">{t('logo.none')}</span>
@@ -78,7 +68,7 @@ export function LogoUploader({ branding, onLogoChange }: LogoUploaderProps) {
             {branding.logoUrl ? t('logo.replace') : t('logo.upload')}
           </Button>
           {branding.logoUrl && (
-            <Button type="button" variant="ghost" size="sm" onClick={() => onLogoChange('', width, height)}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => onLogoChange('', 120, 40)}>
               <Trash2 className="h-4 w-4" /> {t('logo.remove')}
             </Button>
           )}
@@ -93,33 +83,14 @@ export function LogoUploader({ branding, onLogoChange }: LogoUploaderProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="logo-width">{t('logo.width')}</Label>
-          <Input
-            id="logo-width"
-            type="number"
-            min={LOGO_MIN_SIZE}
-            max={LOGO_MAX_SIZE}
-            value={width}
-            onChange={(e) => handleSize('width', Number(e.target.value))}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="logo-height">{t('logo.height')}</Label>
-          <Input
-            id="logo-height"
-            type="number"
-            min={LOGO_MIN_SIZE}
-            max={LOGO_MAX_SIZE}
-            value={height}
-            onChange={(e) => handleSize('height', Number(e.target.value))}
-          />
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {t('logo.sizeHint', { min: LOGO_MIN_SIZE, max: LOGO_MAX_SIZE })}
-      </p>
+      <p className="text-xs text-muted-foreground">{t('logo.cropHint')}</p>
+
+      <LogoEditor
+        open={editorOpen}
+        imageSrc={pendingSrc}
+        onClose={() => setEditorOpen(false)}
+        onApply={handleApplyCrop}
+      />
     </div>
   )
 }

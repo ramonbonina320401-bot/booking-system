@@ -1,10 +1,12 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router'
+import { toast } from 'sonner'
 
 import { useAuth } from '@/hooks/useAuth'
 import { useIdleSignOut } from '@/hooks/useIdleSignOut'
 import { useMaintenanceGuard } from '@/hooks/useMaintenanceGuard'
-import { useI18n } from '@/lib/i18n'
+import { useI18n, tr } from '@/lib/i18n'
+import { flushDirtySettings } from '@/lib/settingsAutosave'
 import { Navbar } from '@/components/layout/Navbar'
 import { MobileTabBar } from '@/components/layout/MobileTabBar'
 import { AdminMobileTabBar } from '@/components/layout/AdminMobileTabBar'
@@ -160,6 +162,22 @@ function PublicLayout() {
 /** Dashboard shell — dark icon rail + top header + dot-grid content area. */
 function AdminLayout() {
   const location = useLocation()
+
+  // Auto-save dirty settings when the admin navigates away from the Settings
+  // panel. BrowserRouter has no useBlocker, so the draft lives in a module-
+  // level store + flusher (registered by SettingsPanel) — the save still runs
+  // after the panel unmounts. A no-op when the draft is clean or the panel was
+  // never visited.
+  useEffect(() => {
+    let cancelled = false
+    void flushDirtySettings().then((ok) => {
+      if (!ok && !cancelled) toast.error(tr('st.autoSaveFailed'))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [location.pathname])
+
   return (
     <div className="flex min-h-dvh">
       <Sidebar />

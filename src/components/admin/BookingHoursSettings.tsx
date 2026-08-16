@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Clock3, Loader2, Save } from 'lucide-react'
+import { Clock3, Loader2, RotateCcw, Save, Undo2 } from 'lucide-react'
 import { doc, setDoc } from 'firebase/firestore'
 
 import { db } from '@/lib/firebase'
@@ -35,6 +35,16 @@ const REMINDER_DAY_OPTIONS = [0, 1, 2, 3, 7] // 0 = off
 /** Weekday order used in the closed-days picker (0=Sun … 6=Sat). */
 const DAY_VALUES = [0, 1, 2, 3, 4, 5, 6]
 
+/** Built-in defaults (what SettingsContext falls back to before Firestore). */
+const DEFAULTS = {
+  openHour: 8,
+  closeHour: 18,
+  slotMinutes: 60,
+  closedDays: [] as number[],
+  reminderMinutes: 30,
+  reminderDays: 0,
+}
+
 /** Short weekday label in the current locale (e.g. "Sun", "Linggo"). */
 function dayLabel(value: number): string {
   // 2026-01-04 is a Sunday — offset by the weekday index for any day's name.
@@ -58,6 +68,18 @@ export function BookingHoursSettings() {
   const [reminderMinutes, setReminderMinutes] = useState<number>(bookingConfig.reminderMinutes)
   const [reminderDays, setReminderDays] = useState<number>(bookingConfig.reminderDays)
   const [saving, setSaving] = useState(false)
+
+  // Anything differs from the last-saved values? (drives the Save button +
+  // the unsaved badge — same pattern as the branding panel).
+  const sameArrays = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i])
+  const dirty =
+    openHour !== bookingConfig.openHour ||
+    closeHour !== bookingConfig.closeHour ||
+    slotMinutes !== bookingConfig.durationMinutes ||
+    !sameArrays([...closedDays].sort(), [...bookingConfig.closedDays].sort()) ||
+    reminderMinutes !== bookingConfig.reminderMinutes ||
+    reminderDays !== bookingConfig.reminderDays
+  const invalid = closeHour <= openHour
 
   // The context exposes defaults (8AM–6PM, 60 min) before Firestore responds.
   // Sync our local draft whenever the loaded values change (defaults → real
@@ -101,12 +123,39 @@ export function BookingHoursSettings() {
     }
   }
 
+  /** Undo — revert this section to the last-saved values. */
+  const resetToSaved = () => {
+    setOpenHour(bookingConfig.openHour)
+    setCloseHour(bookingConfig.closeHour)
+    setSlotMinutes(bookingConfig.durationMinutes)
+    setClosedDays(bookingConfig.closedDays)
+    setReminderMinutes(bookingConfig.reminderMinutes)
+    setReminderDays(bookingConfig.reminderDays)
+    toast.info(tr('st.hoursResetSaved'))
+  }
+
+  /** Factory reset — back to the app's built-in defaults. */
+  const resetToDefaults = () => {
+    setOpenHour(DEFAULTS.openHour)
+    setCloseHour(DEFAULTS.closeHour)
+    setSlotMinutes(DEFAULTS.slotMinutes)
+    setClosedDays([...DEFAULTS.closedDays])
+    setReminderMinutes(DEFAULTS.reminderMinutes)
+    setReminderDays(DEFAULTS.reminderDays)
+    toast.info(tr('st.hoursResetDefaults'))
+  }
+
   return (
-    <Card>
+    <Card className={cn(dirty && 'border-primary/40')}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Clock3 className="h-4 w-4 text-primary" aria-hidden="true" />
           {t('st.hours')}
+          {dirty && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+              {t('st.hoursUnsaved')}
+            </span>
+          )}
         </CardTitle>
         <CardDescription>{t('st.hoursDesc')}</CardDescription>
       </CardHeader>
@@ -226,8 +275,35 @@ export function BookingHoursSettings() {
 
         <p className="text-xs text-muted-foreground">{t('st.hoursNote')}</p>
 
-        <div className="flex justify-end">
-          <Button onClick={() => void save()} disabled={saving} variant="outline">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={resetToSaved}
+            disabled={!dirty || saving}
+            title={t('st.hoursResetSaved')}
+          >
+            <Undo2 className="h-4 w-4" />
+            {t('st.hoursReset')}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={resetToDefaults}
+            disabled={saving}
+            title={t('st.hoursResetDefaults')}
+          >
+            <RotateCcw className="h-4 w-4" />
+            {t('st.hoursDefaults')}
+          </Button>
+          <Button
+            onClick={() => void save()}
+            disabled={!dirty || saving || invalid}
+            variant="outline"
+            title={invalid ? tr('st.hoursInvalid') : dirty ? undefined : tr('st.hoursNoChanges')}
+          >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {t('st.saveHours')}
           </Button>

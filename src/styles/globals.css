@@ -101,14 +101,35 @@
     @apply border-border outline-ring/50;
   }
 
+  html {
+    /* Also clip the root element: Google's reCAPTCHA badge (loaded by Firebase
+       phone auth) is fixed-position and extends past the viewport, which made
+       phones scroll horizontally. clip (not hidden) avoids breaking sticky
+       headers/banners. */
+    overflow-x: clip;
+  }
+
+  /* Radix (react-remove-scroll) locks body scroll while any dialog or select
+     is open via body[data-scroll-locked] { overflow: hidden !important }.
+     overflow: hidden turns body into a scroll container, which silently kills
+     position: sticky — so opening ANY dropdown scrolled the navbar/sidebar
+     away. overflow: clip still clips overflow (and remove-scroll's own wheel /
+     touch handlers still block background scrolling), but does NOT create a
+     scroll container, so sticky keeps working. Higher specificity (html body)
+     wins the !important tie against the runtime-injected stylesheet. */
+  html body[data-scroll-locked] {
+    overflow: clip !important;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     min-height: 100dvh;
-    /* Prevent page-level horizontal scroll on narrow phones. Decorative
-       absolutely-positioned elements (hero glow, confetti, dropdowns) must
-       never push the page sideways — internal scroll containers (tables,
-       select popovers) still scroll on their own. */
-    overflow-x: hidden;
+    /* Prevent page-level horizontal scroll on narrow phones. clip (NOT hidden)
+       is essential here: hidden turns body into a scroll container, which
+       silently breaks position: sticky for the navbar/sidebar (they scroll
+       away with the page). clip clips overflow without creating a scroll
+       container, so sticky keeps working. */
+    overflow-x: clip;
     font-feature-settings: 'ss01', 'cv01';
   }
 }

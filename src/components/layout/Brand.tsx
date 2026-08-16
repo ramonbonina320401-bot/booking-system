@@ -18,7 +18,7 @@ export function Brand({ className, textClassName }: { className?: string; textCl
         width={logoWidth}
         height={logoHeight}
         className={cn('object-contain', className)}
-        style={{ width: logoWidth, height: logoHeight, maxWidth: 300 }}
+        style={{ width: logoWidth, height: logoHeight, maxWidth: 300, maxHeight: 40 }}
       />
     )
   }

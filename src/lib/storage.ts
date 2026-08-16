@@ -13,9 +13,6 @@
 
 export const LOGO_MAX_SIZE_BYTES = 500 * 1024 // 500 KB — safe under the 1 MiB doc limit
 export const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp']
-export const LOGO_MIN_SIZE = 40 // px — constrains the navbar layout
-export const LOGO_MAX_SIZE = 300 // px
-
 /** Validate a logo file before reading it. Throws with a user-friendly message. */
 export function validateLogoFile(file: File): void {
   if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
@@ -23,16 +20,6 @@ export function validateLogoFile(file: File): void {
   }
   if (file.size > LOGO_MAX_SIZE_BYTES) {
     throw new Error('File too large. Maximum size is 500 KB (Firestore limit).')
-  }
-}
-
-/** Validate the admin-entered logo dimensions (prevents layout breakage). */
-export function validateLogoSize(width: number, height: number): void {
-  if (Number.isNaN(width) || Number.isNaN(height)) {
-    throw new Error('Logo width and height must be numbers.')
-  }
-  if (width < LOGO_MIN_SIZE || width > LOGO_MAX_SIZE || height < LOGO_MIN_SIZE || height > LOGO_MAX_SIZE) {
-    throw new Error(`Logo size must be between ${LOGO_MIN_SIZE}px and ${LOGO_MAX_SIZE}px.`)
   }
 }
 
