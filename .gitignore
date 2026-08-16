@@ -1,0 +1,25 @@
+# dependencies
+node_modules
+
+# build output
+dist
+dist-ssr
+
+# env (never commit real keys)
+.env
+.env.local
+.env.*.local
+
+# Firebase service account key — SECRET, admin access to your project
+*firebase-adminsdk*.json
+serviceAccountKey.json
+
+# logs
+*.log
+%TEMP%*
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="description" content="Dynamic Booking System — book resources, managed with live branding and maintenance mode." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <!-- Static manifest (build-time defaults). The app swaps this for a
+         dynamic manifest built from system_settings once settings load. -->
+    <link rel="manifest" href="/manifest.json" />
+    <title>Booking System</title>
+  </head>
+  <body>
+    <!-- Apply the saved theme before React mounts to avoid a flash of the
+         wrong theme (kept in sync with src/stores/useThemeStore.ts). External
+         file so the deployed CSP can forbid inline scripts. -->
+    <script src="/theme.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

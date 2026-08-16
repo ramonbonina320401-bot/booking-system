@@ -1,0 +1,181 @@
+rules_version = '2';
+
+// ===========================================================================
+// Firestore security rules — the Firebase equivalent of the RLS policies.
+//
+//  - system_settings: public read (branding loads pre-login), admin writes
+//  - audit_log:        append-only; admin read/create only (immutable)
+//  - profiles:         own doc read/update (role + active admin-only),
+//                      admin reads all; owner may delete ONLY while active
+//  - resources:        public read, admin-only writes
+//  - announcements:    signed-in read, admin-only writes
+//  - bookings:         slot docs — own read; create must be own, start in the
+//                      FUTURE (start_ms), maintenance OFF, user active +
+//                      email-verified, resource active, and status ALWAYS
+//                      'pending' (approval cannot be forged); users may only
+//                      cancel their own pending/confirmed slots
+//  - booking_history:  same rules as bookings + owner delete (account
+//                      deletion); permanent records otherwise
+//
+// Deploy with:  node scripts/deploy-rules.mjs --service-account <key.json>
+// ===========================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ---- helpers ---------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin';
+    }
+    // Deactivated accounts (active == false) cannot book. NOTE: in the rules
+    // language a MISSING field makes `active != false` evaluate to FALSE, so
+    // profiles without the field are blocked (fail-closed). The app + seed
+    // always write active: true; legacy profiles were backfilled.
+    function isActiveUser() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.active != false;
+    }
+    // Email accounts must verify before booking; phone-only users have no
+    // email claim in the token, so they are not gated.
+    function emailVerifiedOrPhone() {
+      return !('email' in request.auth.token) || request.auth.token.email_verified == true;
+    }
+    // Backend maintenance enforcement: reads the maintenance_mode setting doc.
+    function maintenanceOn() {
+      return get(/databases/$(database)/documents/system_settings/maintenance_mode).data.value == true;
+    }
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    // String length guard (null/absent allowed) — caps abusive payload sizes.
+    function strLenOk(value, max) {
+      return value == null || value.size() <= max;
+    }
+    // Slot is in the future: start_ms is the numeric epoch mirror of the ISO
+    // start_time written by the app (rules can't parse ISO strings).
+    function startsInFuture() {
+      return request.resource.data.start_ms != null &&
+        request.resource.data.start_ms > request.time.toMillis();
+    }
+
+    // ---- system_settings --------------------------------------------------
+    // Public read (the app + PWA manifest need values before login).
+    // Writes: admin only.
+    match /system_settings/{key} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- audit_log ---------------------------------------------------------
+    // Immutable record of admin actions — admin read/create only. No
+    // update/delete ever, so the trail cannot be tampered with by rules.
+    match /audit_log/{id} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // ---- profiles ---------------------------------------------------------
+    match /profiles/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isOwner(uid)
+        && strLenOk(request.resource.data.full_name, 100)
+        && strLenOk(request.resource.data.phone, 30)
+        && strLenOk(request.resource.data.email, 254)
+        && strLenOk(request.resource.data.avatar_url, 600000);
+      // Users may edit their own profile (name/phone/avatar/...) but NEVER
+      // their own role or active flag — those are admin-only. This also
+      // closes the self-escalation hole (regular user → admin via self-update).
+      allow update: if (isAdmin()
+        || (isOwner(uid)
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.active == resource.data.active))
+        && strLenOk(request.resource.data.full_name, 100)
+        && strLenOk(request.resource.data.phone, 30)
+        && strLenOk(request.resource.data.email, 254)
+        && strLenOk(request.resource.data.avatar_url, 600000);
+      // Owner may delete their own profile ONLY while active — a deactivated
+      // user must not be able to wipe the profile (that would reset the
+      // active flag on next ensureProfile and bypass deactivation).
+      allow delete: if isAdmin() || (isOwner(uid) && resource.data.active != false);
+    }
+
+    // ---- announcements (notices + scheduled closures) ----------------------
+    // Signed-in users read (shown on Home/Book); admins write.
+    match /announcements/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+        && strLenOk(request.resource.data.title, 100)
+        && strLenOk(request.resource.data.body, 2000)
+        && strLenOk(request.resource.data.start_date, 10)
+        && strLenOk(request.resource.data.end_date, 10);
+      allow delete: if isAdmin();
+    }
+
+    // ---- resources ---------------------------------------------------------
+    match /resources/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && strLenOk(request.resource.data.name, 100)
+        && strLenOk(request.resource.data.description, 1000);
+      allow delete: if isAdmin();
+    }
+
+    // ---- bookings (slot occupancy docs — atomic conflict point) -----------
+    match /bookings/{slotId} {
+      allow read: if isSignedIn() && (resource.data.user_id == request.auth.uid || isAdmin());
+
+      // Create: own booking only, maintenance must be OFF, user must be
+      // active + email-verified, the slot must be in the FUTURE, notes are
+      // length-capped, and bookings ALWAYS start as 'pending' (admin approval
+      // cannot be forged by writing a status directly).
+      allow create: if isSignedIn()
+        && isActiveUser()
+        && emailVerifiedOrPhone()
+        && !maintenanceOn()
+        && startsInFuture()
+        && strLenOk(request.resource.data.notes, 500)
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && get(/databases/$(database)/documents/resources/$(request.resource.data.resource_id)).data.is_active == true;
+
+      // Update: admin may change anything; users may only cancel their own
+      // pending/confirmed slot (status -> cancelled).
+      allow update: if isAdmin()
+        || (isOwner(resource.data.user_id)
+            && resource.data.status in ['pending', 'confirmed']
+            && request.resource.data.status == 'cancelled');
+
+      // Delete: admins, or the owner freeing their own slot on cancel.
+      allow delete: if isAdmin() || isOwner(resource.data.user_id);
+    }
+
+    // ---- booking_history (permanent records) ------------------------------
+    match /booking_history/{id} {
+      allow read: if isSignedIn() && (resource.data.user_id == request.auth.uid || isAdmin());
+
+      // Same as bookings: must start 'pending', be in the future, and the
+      // booker must be active + email-verified (approval cannot be forged).
+      allow create: if isSignedIn()
+        && isActiveUser()
+        && emailVerifiedOrPhone()
+        && !maintenanceOn()
+        && startsInFuture()
+        && strLenOk(request.resource.data.notes, 500)
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      allow update: if isAdmin()
+        || (isOwner(resource.data.user_id)
+            && resource.data.status in ['pending', 'confirmed']
+            && request.resource.data.status == 'cancelled');
+
+      // Delete: admins, or the owner removing their own records (account
+      // deletion). Deactivation is unaffected — deleting history doesn't
+      // reset the profile's active flag.
+      allow delete: if isAdmin() || isOwner(resource.data.user_id);
+    }
+  }
+}

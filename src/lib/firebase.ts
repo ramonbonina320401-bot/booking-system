@@ -1,0 +1,34 @@
+import { initializeApp, type FirebaseOptions } from 'firebase/app'
+import { getAuth } from 'firebase/auth'
+import { getFirestore } from 'firebase/firestore'
+
+// ---------------------------------------------------------------------------
+// Firebase client — initialized from env vars. Never hardcode keys.
+// Set VITE_FIREBASE_* in your .env (see .env.example).
+//
+// Note: no Firebase Storage here — Cloud Storage requires the paid Blaze plan
+// since Oct 2025, so logos are stored as base64 inside Firestore instead
+// (see lib/storage.ts).
+// ---------------------------------------------------------------------------
+
+const firebaseConfig: FirebaseOptions = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+}
+
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  // Fail loudly in dev so missing env vars are obvious; the app still mounts
+  // so login/settings pages can render (they will error on network calls).
+  console.warn(
+    '[firebase] Missing VITE_FIREBASE_* env vars. ' +
+      'Copy .env.example to .env and fill in your Firebase project values.'
+  )
+}
+
+export const app = initializeApp(firebaseConfig)
+export const auth = getAuth(app)
+export const db = getFirestore(app)

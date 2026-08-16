@@ -1,0 +1,93 @@
+rules_version = '2';
+
+// ===========================================================================
+// Firestore security rules — the Firebase equivalent of the RLS policies.
+//
+//  - system_settings: public read, admin-only writes
+//  - profiles:        own doc read/update, admin reads all
+//  - resources:       public read, admin-only writes
+//  - bookings:        slot docs — own read, create must be own + maintenance
+//                     must be OFF; users may only cancel their own slots
+//  - booking_history: same as bookings, but permanent records
+//
+// Deploy with:  firebase deploy --only firestore:rules
+// ===========================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ---- helpers ---------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin';
+    }
+    // Backend maintenance enforcement: reads the maintenance_mode setting doc.
+    function maintenanceOn() {
+      return get(/databases/$(database)/documents/system_settings/maintenance_mode).data.value == true;
+    }
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ---- system_settings --------------------------------------------------
+    // Public read (the app + PWA manifest need values before login).
+    // Writes: admin only.
+    match /system_settings/{key} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- profiles ---------------------------------------------------------
+    match /profiles/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isOwner(uid);
+      allow update: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ---- resources ---------------------------------------------------------
+    match /resources/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- bookings (slot occupancy docs — atomic conflict point) -----------
+    match /bookings/{slotId} {
+      allow read: if isSignedIn() && (resource.data.user_id == request.auth.uid || isAdmin());
+
+      // Create: own booking only, maintenance must be OFF, resource must be active.
+      allow create: if isSignedIn()
+        && !maintenanceOn()
+        && request.resource.data.user_id == request.auth.uid
+        && get(/databases/$(database)/documents/resources/$(request.resource.data.resource_id)).data.is_active == true;
+
+      // Update: admin may change anything; users may only cancel their own
+      // pending/confirmed slot (status -> cancelled).
+      allow update: if isAdmin()
+        || (isOwner(resource.data.user_id)
+            && resource.data.status in ['pending', 'confirmed']
+            && request.resource.data.status == 'cancelled');
+
+      // Delete: admins, or the owner freeing their own slot on cancel.
+      allow delete: if isAdmin() || isOwner(resource.data.user_id);
+    }
+
+    // ---- booking_history (permanent records) ------------------------------
+    match /booking_history/{id} {
+      allow read: if isSignedIn() && (resource.data.user_id == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn()
+        && !maintenanceOn()
+        && request.resource.data.user_id == request.auth.uid;
+
+      allow update: if isAdmin()
+        || (isOwner(resource.data.user_id)
+            && resource.data.status in ['pending', 'confirmed']
+            && request.resource.data.status == 'cancelled');
+
+      allow delete: if isAdmin();
+    }
+  }
+}
