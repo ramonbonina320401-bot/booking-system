@@ -1,12 +1,13 @@
 # SSMS + Swagger — Migration & API Plan
 
-> **Status: API SCAFFOLDED (Aug 17, 2026)** — the ASP.NET Core Web API skeleton
-> now lives in [`api/`](../api/) with Swagger UI, EF Core (InMemory for demo,
-> SQL Server via connection string), and the core endpoints implemented. The
-> **data migration** (Firestore → SQL Server) and **frontend data-layer switch**
-> are still TODO. This is the **living document** for the migration: the data
-> model, security requirements, schema, and API design below reflect the
-> **current, actual** state of the app and are updated as the app changes.
+> **Status: PLAN COMPLETE (Aug 17, 2026)** — the ASP.NET Core Web API skeleton
+> lives in [`api/`](../api/) with Swagger UI, EF Core (InMemory for demo, SQL
+> Server via connection string), and the core endpoints implemented.
+>
+> **👉 Para sa kumpletong migration plan (feature inventory, gaps, endpoint list,
+> security, data migration, frontend switch, testing, deployment, rollback,
+> timeline, definition-of-done): basahin ang [`SSMS-MIGRATION-PLAN.md`](SSMS-MIGRATION-PLAN.md).**
+> Ang file na ito ay ang technical reference (data model, schema, endpoint mapping).
 > **Last updated: Aug 17, 2026.**
 
 ---
