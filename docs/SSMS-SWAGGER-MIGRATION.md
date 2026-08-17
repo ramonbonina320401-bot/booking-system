@@ -1,10 +1,13 @@
 # SSMS + Swagger — Migration & API Plan
 
-> **Status: PAUSED (planned)** — per client: finish all Firebase frontend + backend
-> features first, migrate together after. This is the **living document** for the
-> migration: the data model, security requirements, schema, and API design below
-> reflect the **current, actual** state of the app and are updated as the app
-> changes. **Last updated: Aug 16, 2026.**
+> **Status: API SCAFFOLDED (Aug 17, 2026)** — the ASP.NET Core Web API skeleton
+> now lives in [`api/`](../api/) with Swagger UI, EF Core (InMemory for demo,
+> SQL Server via connection string), and the core endpoints implemented. The
+> **data migration** (Firestore → SQL Server) and **frontend data-layer switch**
+> are still TODO. This is the **living document** for the migration: the data
+> model, security requirements, schema, and API design below reflect the
+> **current, actual** state of the app and are updated as the app changes.
+> **Last updated: Aug 17, 2026.**
 
 ---
 
@@ -215,7 +218,7 @@ CREATE INDEX IX_AuditLog_CreatedAt ON AuditLog (CreatedAt DESC);
 
 ## 7. Migration steps (when client says go)
 
-1. **Scaffold** — ASP.NET Core Web API (`.NET 8`/LTS) + Swashbuckle.
+1. **Scaffold** — ✅ **DONE (Aug 17, 2026):** ASP.NET Core Web API (`.NET 8`) + Swashbuckle lives in [`api/`](../api/). Run with `cd api && dotnet run --urls http://localhost:5090`, open `http://localhost:5090/swagger`. Demo auth via `X-User-Id` header (`demo-admin` / `demo-user`).
 2. **Schema** — run the `CREATE TABLE` script above (or EF Core migrations).
 3. **Export** — script (Node + service account, like existing `scripts/*.mjs`) that reads every collection and writes JSON per table.
    Existing reusable scripts: `seed-firestore.mjs`, `inspect-bookings.mjs`, `clean-test-data.mjs`, `backfill-emails.mjs`, `deploy-rules.mjs`.
@@ -293,9 +296,10 @@ Every mutation writes an `AuditLog` row server-side.
 | Aug 13, 2026 | Plan created; initial data model + endpoint sketch | Draft |
 | Aug 16, 2026 | **Security hardening batch:** added `audit_log` collection + admin viewer; input-length caps in rules; `start_ms` past-date enforcement; email-verification gate (rules + UI, seed users verified); deactivated-user enforcement + admin user actions; status-forgery fix (`status='pending'` required); owner account-deletion; idle auto-signout; min-8 password validation; CSP/security headers in `firebase.json` | Live in Firebase |
 | Aug 16, 2026 | **Booking reminders:** client-side hook (`useBookingReminders`, works on free plan while app is open — toast + system notification, per-device dedup via localStorage) + scheduled Cloud Function `sendBookingReminders` (`/functions`, every 5 min, FCM push before confirmed bookings, stamps `reminder_sent_at` — requires Blaze). **Lead time is admin-configurable** via `system_settings/booking_reminder_minutes` (15–180 min) **plus an optional days-before reminder** via `system_settings/booking_reminder_days` (0=off, 1–7 days, separate `reminder_day_sent_at` stamp) — both read by the hook and the function. **Notification deep-link:** tapping any reminder (toast "View" action, SW notification click, FCM push) opens `/my-bookings` (SW reads `data.url`) | Live in app; function ready-to-deploy |
+| Aug 17, 2026 | **API scaffold:** `api/` ASP.NET Core Web API (.NET 8) + Swagger UI; EF Core InMemory demo DB (SQL Server via `DefaultConnection`); endpoints: users, resources, bookings (anti-double-booking via unique slot), settings, announcements, admin stats, audit; Swagger locked (dev-only + `ALLOW_SWAGGER`/`X-Swagger-Key` for prod demos) | Scaffolded (works) |
 | — | Export script (Firestore → JSON per table) | TODO |
 | — | SQL schema import + data parity check | TODO |
-| — | ASP.NET API + Swagger scaffold | TODO |
+| — | Firebase ID-token validation in API (replace `X-User-Id` demo header) | TODO |
 | — | Frontend data-layer switch | TODO |
 | — | Cutover + decommission Firestore | TODO |
 
